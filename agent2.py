@@ -63,16 +63,57 @@ class Agent(object):
 		action_nr += 1
 		#The actual response "observed"
 		response = response_interpretation*self.response_obscurer
-		for i in self.smallest_acts
+
+		new_state = list(self.state)
+
+		#This means that this particular response has never been seen
+		if(response not in self.seen_responses):
+			self.seen_responses.add(response)
+
+			counter = 0
+			not_set = True
+			#Here we place it in our state
+			for act_id in self.smallest_acts:
+				if(action_nr < act_id):
+					self.output_to_index[response] = counter
+					self.smallest_acts = self.smallest_acts[:counter+1] + [action_nr] + self.smallest_acts[counter+1:]
+					new_state = new_state[:counter] + [(action_nr,)] + new_state[counter:]
+					for key, value in self.output_to_index:
+						if(value >= counter):
+							self.output_to_index[key] += 1
+					not_set = False
 
 
-		x = list(set(list(self.state) + [*action_nr]))
-		x.sort()
-		x = tuple(x)
-		self.Q[x] = self.Q.get(x, np.ones(self.num_actions))
+					break;
+				counter += 1
+			if(not_set):
+				new_state.append((action_nr,))
+
+
+		else:
+			add_to_index = self.output_to_index[response]
+			x = np.sort(list(self.state[add_to_index]) + [action_nr])
+			print(x)
+			sys.exit()
+
+
+
+
+
+
+		#x = list(set(list(self.state) + [*action_nr]))
+		#x.sort()
+		#x = tuple(x)
+		new_state = tuple(new_state)
+		print("state2",new_state)
+		print("state_old", self.state)
 
 		self.oldstate = self.state
-		self.state = x
+		self.state = new_state
+
+		self.Q[self.state] = self.Q.get(self.state, np.ones(self.num_actions))
+
+
 
 
 
@@ -121,8 +162,9 @@ class Agent(object):
 		self.response_obscurer = np.random.choice([-1,1])
 
 		#These two is to create the unique state
-		self.obs_mapping = {}
+		self.output_to_index = {}
 		self.smallest_acts = []
+		self.seen_responses = set([])
 
 
 	def run_episode(self):
