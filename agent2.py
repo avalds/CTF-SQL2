@@ -1,12 +1,18 @@
 import numpy as np
 import mockSQLenv as srv
 import const
-import sys
+import sys, time
 import utilities as ut
 
 """
 agent2.py is based on agent
 The main difference is that we assume no knowledge of what the responses look like. So a single query will tell us nothing.
+
+Our current state is now a set of sets
+So ideally we our Q would be a dict of sets that contain sets.
+The set of sets that is our state is simply a grouping of the actions that result in the same response.
+In order to create this we need for each run also to keep a dictionary to map to the correct subsets, to this effect it may be easier to let this be a sorted list of lists.
+Python does not support set of sets, or dictinary keys that are lists or sets, so we will use tuples.
 """
 
 class Agent(object):
@@ -19,12 +25,15 @@ class Agent(object):
 		self.verbose = verbose
 		self.set_learning_options()
 		self.used_actions = []
-		self.powerset = None
 
 		self.steps = 0
 		self.rewards = 0
 		self.total_trials = 0
 		self.total_successes = 0
+
+		self.response_to_tuple_index = {}
+		self.seen_responses = set([])
+		self.unsorted_state = []
 
 
 	def set_learning_options(self,exploration=0.2,learningrate=0.1,discount=0.9, max_step = 100):
@@ -67,46 +76,32 @@ class Agent(object):
 		new_state = list(self.state)
 
 		#This means that this particular response has never been seen
+		#This is important since it means that we have to create a new instance in the tuple.
 		if(response not in self.seen_responses):
+			self.response_to_tuple_index[response] = len(self.seen_responses)
 			self.seen_responses.add(response)
+			if(self.verbose): print("unseen response", response)
 
-			counter = 0
-			not_set = True
-			#Here we place it in our state
-			for act_id in self.smallest_acts:
-				if(action_nr < act_id):
-					self.output_to_index[response] = counter
-					self.smallest_acts = self.smallest_acts[:counter+1] + [action_nr] + self.smallest_acts[counter+1:]
-					new_state = new_state[:counter] + [(action_nr,)] + new_state[counter:]
-					for key, value in self.output_to_index:
-						if(value >= counter):
-							self.output_to_index[key] += 1
-					not_set = False
-
-
-					break;
-				counter += 1
-			if(not_set):
-				new_state.append((action_nr,))
+			self.unsorted_state.append([action_nr])
 
 
 		else:
-			add_to_index = self.output_to_index[response]
-			x = np.sort(list(self.state[add_to_index]) + [action_nr])
-			print(x)
-			sys.exit()
+			#print("response_to_tuple_index, response",self.response_to_tuple_index, response)
+			index = self.response_to_tuple_index[response]
+			if(action_nr not in self.unsorted_state[index]):
+				self.unsorted_state[index].append(action_nr)
+
+		new_state = list(map(sorted, self.unsorted_state))
+		#print(new_state)
+		sorted(new_state)
+
+		new_state = tuple(map(tuple, new_state))
 
 
-
-
-
-
-		#x = list(set(list(self.state) + [*action_nr]))
-		#x.sort()
-		#x = tuple(x)
-		new_state = tuple(new_state)
-		print("state2",new_state)
-		print("state_old", self.state)
+		if(self.verbose):
+			print("state2",new_state)
+		#print("unsorted", self.unsorted_state)
+		#print("state_old", self.state)
 
 		self.oldstate = self.state
 		self.state = new_state
@@ -162,8 +157,8 @@ class Agent(object):
 		self.response_obscurer = np.random.choice([-1,1])
 
 		#These two is to create the unique state
-		self.output_to_index = {}
-		self.smallest_acts = []
+		self.response_to_tuple_index = {}
+		self.unsorted_state = []
 		self.seen_responses = set([])
 
 
@@ -180,31 +175,34 @@ class Agent(object):
 			self.total_successes += 1
 		return self.terminated
 
-	def run_human_look_episode(self):
+	def run_human_look_episode(self, verbose = True):
 		_,_,self.terminated,s = self.env.reset()
-		print(s)
+		if(verbose): print(s)
 		while (not(self.terminated)) and self.steps < self.max_step:
-			self.look_step()
+			self.look_step(verbose = verbose)
 
 		self.total_trials += 1
 		if(self.terminated):
 			self.total_successes += 1
 		return self.terminated
 
-	def look_step(self):
+	def look_step(self, verbose = True):
 		self.steps = self.steps + 1
 		print("step", self.steps)
 
 		print("My state is")
 		print(self.state)
 
-		print("My Q row looks like this:")
-		print(self.Q[self.state])
-		print("Action ranking is")
 
-		print(np.argsort(self.Q[self.state])[::-1])
-		action = self._select_action(learning = True)
-		print("action equal highest rank",action == np.argsort(self.Q[self.state])[::-1][0])
+		if(verbose):
+			print("My Q row looks like this:")
+			print(self.Q[self.state])
+			print("Action ranking is")
+			print(np.argsort(self.Q[self.state])[::-1])
+
+		action = self._select_action(learning = False)
+		if(verbose): print("action equal highest rank",action == np.argsort(self.Q[self.state])[::-1][0])
+		print(const.actions[action])
 
 
 
